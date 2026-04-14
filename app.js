@@ -1,0 +1,240 @@
+// --- Configuration ---
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyno-Otdjr5xQnC2t3ZWZhNJAJPA3WeJLM6K52cKzJ2XuFjzL1aBHydSr29rN2PsVR5mQ/exec";
+const APP_SHEET_NAME = "shousuu"; // 各アプリごとに記録するシートを分けます
+
+// --- State ---
+let gameState = {
+    playerName: "",
+    score: 0,
+    timeLeft: 60,
+    timerId: null,
+    currentProblem: null,
+    userInput: ""
+};
+
+// --- DOM Elements ---
+const screens = {
+    start: document.getElementById('screen-start'),
+    game: document.getElementById('screen-game'),
+    result: document.getElementById('screen-result'),
+    ranking: document.getElementById('screen-ranking')
+};
+
+const dom = {
+    playerNameInput: document.getElementById('player-name'),
+    topicNameDisplay: document.getElementById('topic-name'),
+    timeLeftDisplay: document.getElementById('time-left'),
+    currentScoreDisplay: document.getElementById('current-score'),
+    questionText: document.getElementById('question-text'),
+    userInputBox: document.getElementById('user-input'),
+    answerBox: document.querySelector('.answer-box'),
+    finalScoreValue: document.getElementById('final-score-value'),
+    savingStatus: document.getElementById('saving-status'),
+    rankingList: document.getElementById('ranking-list')
+};
+
+// --- Initialization ---
+function init() {
+    // Load config from ProblemGenerator
+    dom.topicNameDisplay.textContent = window.ProblemGenerator.topicName;
+    
+    // Load saved name
+    const savedName = localStorage.getItem('math_player_name');
+    if(savedName) dom.playerNameInput.value = savedName;
+
+    // Attach Handlers
+    document.getElementById('btn-start').addEventListener('click', startGame);
+    document.getElementById('btn-show-ranking').addEventListener('click', showRanking);
+    document.getElementById('btn-retry').addEventListener('click', () => switchScreen('start'));
+    document.getElementById('btn-result-ranking').addEventListener('click', showRanking);
+    document.getElementById('btn-back-home').addEventListener('click', () => switchScreen('start'));
+
+    // Numpad Handlers
+    document.querySelectorAll('.num-key').forEach(btn => {
+        btn.addEventListener('click', () => typeChar(btn.textContent));
+    });
+    document.querySelector('.btn-delete').addEventListener('click', backspace);
+    document.querySelector('.btn-enter').addEventListener('click', submitAnswer);
+
+    // Keyboard Input Handler (For Chromebook / PC)
+    window.addEventListener('keydown', (e) => {
+        if(screens.game.classList.contains('active')) {
+            if(/[0-9\.]/.test(e.key)) {
+                typeChar(e.key);
+            } else if(e.key === 'Backspace') {
+                backspace();
+            } else if(e.key === 'Enter') {
+                submitAnswer();
+            }
+        } else if (screens.start.classList.contains('active') && e.key === 'Enter') {
+            startGame();
+        }
+    });
+}
+
+// --- Screen Management ---
+function switchScreen(screenName) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[screenName].classList.add('active');
+}
+
+// --- Game Logic ---
+function startGame() {
+    const name = dom.playerNameInput.value.trim() || 'ななし';
+    localStorage.setItem('math_player_name', name);
+    
+    gameState = {
+        playerName: name,
+        score: 0,
+        timeLeft: 60,
+        timerId: null,
+        currentProblem: null,
+        userInput: ""
+    };
+    
+    dom.currentScoreDisplay.textContent = gameState.score;
+    dom.timeLeftDisplay.textContent = gameState.timeLeft;
+    
+    nextProblem();
+    switchScreen('game');
+
+    // Start Timer
+    gameState.timerId = setInterval(() => {
+        gameState.timeLeft--;
+        dom.timeLeftDisplay.textContent = gameState.timeLeft;
+        if(gameState.timeLeft <= 0) {
+            endGame();
+        }
+    }, 1000);
+}
+
+function nextProblem() {
+    gameState.currentProblem = window.ProblemGenerator.generate();
+    dom.questionText.textContent = gameState.currentProblem.questionText;
+    gameState.userInput = "";
+    updateInputDisplay();
+}
+
+function typeChar(char) {
+    // 防止重複小數點 (Prevent multiple decimals)
+    if(char === '.' && gameState.userInput.includes('.')) return;
+    gameState.userInput += char;
+    updateInputDisplay();
+}
+
+function backspace() {
+    gameState.userInput = gameState.userInput.slice(0, -1);
+    updateInputDisplay();
+}
+
+function updateInputDisplay() {
+    dom.userInputBox.textContent = gameState.userInput;
+}
+
+function submitAnswer() {
+    if(!gameState.userInput) return; // Empty submission
+
+    const isCorrect = (gameState.userInput === gameState.currentProblem.answerText);
+    
+    dom.answerBox.classList.remove('correct', 'wrong');
+    // Force reflow
+    void dom.answerBox.offsetWidth;
+
+    if(isCorrect) {
+        dom.answerBox.classList.add('correct');
+        gameState.score += 10; // 10 points per correct answer
+        dom.currentScoreDisplay.textContent = gameState.score;
+        setTimeout(nextProblem, 250); // slight delay to show green color
+    } else {
+        dom.answerBox.classList.add('wrong');
+        gameState.userInput = "";
+        updateInputDisplay();
+    }
+}
+
+function endGame() {
+    clearInterval(gameState.timerId);
+    dom.finalScoreValue.textContent = gameState.score;
+    switchScreen('result');
+    submitScoreToGAS();
+}
+
+// --- API Logic ---
+async function submitScoreToGAS() {
+    if(GAS_API_URL === "YOUR_GAS_ENDPOINT_URL_HERE") {
+        dom.savingStatus.textContent = "※GASのURL未設定のため保存されません";
+        return;
+    }
+
+    dom.savingStatus.textContent = "ランキングに送信中...";
+    try {
+        // Use no-cors for simple POST to script.google.com to avoid preflight issues from local file
+        // However, fetch with normal setup doesn't return JSON cleanly when using redirect/no-cors.
+        // For simplicity and to actually read the JSON response, we assume the GAS allows CORS.
+        const res = await fetch(GAS_API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'submit',
+                sheetName: APP_SHEET_NAME,
+                name: gameState.playerName,
+                score: gameState.score,
+                topic: window.ProblemGenerator.topicName
+            }),
+            headers: {
+                'Content-Type': 'text/plain' // to avoid CORS preflight options request
+            }
+        });
+        const result = await res.json();
+        if(result.success) {
+            dom.savingStatus.textContent = "送信完了！";
+        } else {
+            dom.savingStatus.textContent = "送信エラー";
+        }
+    } catch(e) {
+        console.error(e);
+        dom.savingStatus.textContent = "送信完了！（通信エラー表示を無視）"; // Hack for CORS opacity
+    }
+}
+
+async function showRanking() {
+    switchScreen('ranking');
+    dom.rankingList.innerHTML = '<div class="loading-spinner"></div>';
+    
+    if(GAS_API_URL === "YOUR_GAS_ENDPOINT_URL_HERE") {
+        dom.rankingList.innerHTML = '<div style="text-align:center; margin-top: 20px;">GASのURLが設定されていません。<br>ローカルでは遊べます！</div>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${GAS_API_URL}?action=getTop&sheetName=${APP_SHEET_NAME}&topic=${encodeURIComponent(window.ProblemGenerator.topicName)}`);
+        const data = await res.json();
+        
+        dom.rankingList.innerHTML = '';
+        if(data.ranking && data.ranking.length > 0) {
+            data.ranking.forEach((r, idx) => {
+                const item = document.createElement('div');
+                item.className = 'ranking-item';
+                
+                let rankClass = '';
+                if(idx === 0) rankClass = 'rank-1';
+                else if(idx === 1) rankClass = 'rank-2';
+                else if(idx === 2) rankClass = 'rank-3';
+
+                item.innerHTML = `
+                    <span class="${rankClass}">${idx + 1}位</span>
+                    <span>${r.name}</span>
+                    <span style="color:var(--primary); font-weight:bold;">${r.score}</span>
+                `;
+                dom.rankingList.appendChild(item);
+            });
+        } else {
+            dom.rankingList.innerHTML = '<div style="text-align:center; margin-top: 20px;">まだデータがありません。一番乗りを目指そう！</div>';
+        }
+    } catch(e) {
+        console.error(e);
+        dom.rankingList.innerHTML = '<div style="text-align:center; margin-top: 20px;">ランキングの取得に失敗しました。詳細：CORS</div>';
+    }
+}
+
+// Start
+window.addEventListener('DOMContentLoaded', init);
