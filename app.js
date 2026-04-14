@@ -168,11 +168,9 @@ async function submitScoreToGAS() {
 
     dom.savingStatus.textContent = "ランキングに送信中...";
     try {
-        // Use no-cors for simple POST to script.google.com to avoid preflight issues from local file
-        // However, fetch with normal setup doesn't return JSON cleanly when using redirect/no-cors.
-        // For simplicity and to actually read the JSON response, we assume the GAS allows CORS.
-        const res = await fetch(GAS_API_URL, {
+        await fetch(GAS_API_URL, {
             method: 'POST',
+            mode: 'no-cors',
             body: JSON.stringify({
                 action: 'submit',
                 sheetName: APP_SHEET_NAME,
@@ -181,18 +179,13 @@ async function submitScoreToGAS() {
                 topic: window.ProblemGenerator.topicName
             }),
             headers: {
-                'Content-Type': 'text/plain' // to avoid CORS preflight options request
+                'Content-Type': 'text/plain'
             }
         });
-        const result = await res.json();
-        if(result.success) {
-            dom.savingStatus.textContent = "送信完了！";
-        } else {
-            dom.savingStatus.textContent = "送信エラー";
-        }
+        dom.savingStatus.textContent = "送信完了！";
     } catch(e) {
         console.error(e);
-        dom.savingStatus.textContent = "送信完了！（通信エラー表示を無視）"; // Hack for CORS opacity
+        dom.savingStatus.textContent = "送信エラーまたは通信エラー"; 
     }
 }
 
@@ -206,7 +199,7 @@ async function showRanking() {
     }
 
     try {
-        const res = await fetch(`${GAS_API_URL}?action=getTop&sheetName=${APP_SHEET_NAME}&topic=${encodeURIComponent(window.ProblemGenerator.topicName)}`);
+        const res = await fetch(`${GAS_API_URL}?action=getTop&sheetName=${APP_SHEET_NAME}&topic=${encodeURIComponent(window.ProblemGenerator.topicName)}&t=${Date.now()}`);
         const data = await res.json();
         
         dom.rankingList.innerHTML = '';
