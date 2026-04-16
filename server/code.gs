@@ -66,7 +66,7 @@ function doGet(e) {
       }
       
       results.sort((a,b) => b.score - a.score);
-      results = results.slice(0, 10);
+      results = results.slice(0, 30);
       
       return ContentService.createTextOutput(JSON.stringify({ranking: results}))
         .setMimeType(ContentService.MimeType.JSON);
