@@ -339,3 +339,53 @@ h2 {
     margin: 40px auto;
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Landscape Tablet & PC layout (e.g. Chromebooks) */
+@media (min-width: 768px) and (orientation: landscape) {
+    .glass-container {
+        max-width: 900px;
+        height: 85vh;
+        max-height: 800px;
+        padding: 40px;
+    }
+
+    #screen-game.active {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        grid-template-rows: auto 1fr;
+        gap: 40px;
+        align-items: center;
+    }
+
+    .game-header {
+        grid-column: 1 / -1;
+        align-self: start;
+        margin-bottom: 0;
+    }
+
+    .problem-board {
+        grid-column: 1 / 2;
+        grid-row: 2 / 3;
+    }
+
+    .numpad {
+        grid-column: 2 / 3;
+        grid-row: 2 / 3;
+        margin-top: 0;
+        gap: 15px; /* Increase gap slightly for bigger numpad layout */
+    }
+
+    .numpad button {
+        padding: 20px 0;
+        font-size: 1.8rem;
+    }
+
+    .question {
+        font-size: 5rem;
+    }
+    
+    .answer-box {
+        font-size: 3.5rem;
+        height: 90px;
+    }
+}
